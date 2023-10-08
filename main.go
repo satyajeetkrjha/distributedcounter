@@ -2,7 +2,9 @@ package main
 
 import (
 	_ "embed"
-	"io"
+	"fmt"
+	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -11,14 +13,35 @@ import (
 
 const fileName = "/tmp/messages"
 
+// this is max amount of bytes for unix os
+const maxAtomicAppendSize = 512
+
 //go:embed index.html
 var IndexHTML string
+
+var indexTPL = template.Must(template.New("index.html").Parse(IndexHTML))
+
+type IndexData struct {
+	Count    int
+	Messages []string
+}
 
 type webHandler struct {
 }
 
 func (h *webHandler) helloWorld(w http.ResponseWriter, req *http.Request) {
-	io.WriteString(w, IndexHTML)
+	contents, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	messages := strings.Split(strings.TrimSpace(string(contents)), "\n")
+	fmt.Println(messages)
+
+	indexTPL.Execute(w, &IndexData{
+		Count:    len(messages),
+		Messages: messages,
+	})
 }
 
 func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
@@ -29,6 +52,9 @@ func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	} else if strings.Contains(msg, "\n") {
 		http.Error(w, "Newline Not Allowed", http.StatusBadRequest)
+		return
+	} else if len(msg)+1 > maxAtomicAppendSize {
+		http.Error(w, "Message too long", http.StatusBadRequest)
 		return
 	}
 	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)

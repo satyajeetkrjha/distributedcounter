@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const fileName = "/tmp/messages"
@@ -31,6 +32,7 @@ type IndexData struct {
 }
 
 type webHandler struct {
+	sync.RWMutex
 }
 
 func (h *webHandler) writeMessage(msg string) error {
@@ -60,6 +62,8 @@ func (h *webHandler) ReadCounterValue() (count int, err error) {
 }
 
 func (h *webHandler) incrementCounter() error {
+	h.Lock()
+	defer h.Unlock()
 	count, err := h.ReadCounterValue()
 	if err != nil {
 		return err
@@ -78,6 +82,8 @@ func (h *webHandler) incrementCounter() error {
 }
 
 func (h *webHandler) helloWorld(w http.ResponseWriter, req *http.Request) {
+	h.RLock()
+	defer h.RUnlock()
 	contents, err := ioutil.ReadFile(fileName)
 	if err != nil && !os.IsNotExist(err) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -97,7 +103,9 @@ func (h *webHandler) helloWorld(w http.ResponseWriter, req *http.Request) {
 
 func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
+
 	msg := strings.TrimSpace(req.Form.Get("message"))
+	fmt.Println("msg is ", msg)
 	if msg == "" {
 		http.Error(w, "No Message", http.StatusBadRequest)
 		return
@@ -124,6 +132,8 @@ func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
 
 }
 
+// Making concurrent requests
+// ab -c 100 -n 100000 'http://localhost:80/post-message?message=satya'
 func main() {
 	h := &webHandler{}
 	http.Handle("/", http.HandlerFunc(h.helloWorld))

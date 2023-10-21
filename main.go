@@ -14,7 +14,8 @@ import (
 	"sync"
 )
 
-const fileName = "/tmp/messages"
+// const fileName = "/tmp/messages"
+const fileName = "/tmp/smallfile"
 
 var counterFileName = "/tmp/counter"
 
@@ -62,22 +63,17 @@ func (h *webHandler) ReadCounterValue() (count int, err error) {
 }
 
 func (h *webHandler) incrementCounter() error {
-	h.Lock()
-	defer h.Unlock()
 	count, err := h.ReadCounterValue()
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(counterFileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-	if err != nil {
+	contents := fmt.Sprintf("%d\n", count+1)
+	// writing contents to a temp file for situation where you run out of disk space
+	if err := ioutil.WriteFile(counterFileName+".tmp", []byte(contents), 0666); err != nil {
 		return err
 	}
-	defer f.Close()
-
-	if _, err := fmt.Fprintf(f, "%d\n", count+1); err != nil {
-		return err
-	}
-	return nil
+	// renaming is an atomic operation so it will either rename it or just fail and not do anything
+	return os.Rename(counterFileName+".tmp", counterFileName)
 
 }
 
@@ -101,10 +97,11 @@ func (h *webHandler) helloWorld(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
-func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
+func (h *webHandler) uniPostMessage(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 
 	msg := strings.TrimSpace(req.Form.Get("message"))
+	fmt.Println(len(msg))
 	fmt.Println("msg is ", msg)
 	if msg == "" {
 		http.Error(w, "No Message", http.StatusBadRequest)
@@ -116,6 +113,8 @@ func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Message too long", http.StatusBadRequest)
 		return
 	}
+	h.Lock()
+	defer h.Unlock()
 
 	if err := h.writeMessage(msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

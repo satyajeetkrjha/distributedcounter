@@ -97,7 +97,7 @@ func (h *webHandler) helloWorld(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
-func (h *webHandler) uniPostMessage(w http.ResponseWriter, req *http.Request) {
+func (h *webHandler) PostMessage(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 
 	msg := strings.TrimSpace(req.Form.Get("message"))
